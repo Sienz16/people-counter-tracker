@@ -1,23 +1,30 @@
 # People Counter
 
-A real-time people counting system using YOLOX for person detection with tracking and line-crossing detection.
-
-> **Note**: This is an experimental project and is **not production-ready**. The Re-ID (duplicate detection) feature needs significant improvement - it currently may flag different people as duplicates when they wear similar clothing. Contributions and improvements are welcome!
+A real-time people counting system using YOLOX for person detection with tracking and hybrid Re-ID for accurate unique visitor counting.
 
 ## Features
 
 - Person detection using YOLOX (ONNX Runtime)
 - Real-time tracking with ByteTrack (stable IDs)
 - IN/OUT counting with visual line crossing detection
-- Re-ID to prevent duplicate counting (color + texture + body shape matching)
+- **Hybrid Re-ID system:**
+  - Primary: Face recognition (ArcFace ONNX models) - works across clothing changes
+  - Fallback: Body features (color + texture + shape) - when face not visible
 - Capacity monitoring with visual alerts
 - Modern UI overlay with live statistics
 
+## Use Case
+
+Designed for **multi-day events/expos** where:
+- Same visitors return on different days in different clothes
+- Accurate unique visitor count is needed
+- Face recognition provides cross-day identification
+
 ## Known Limitations
 
-- **Re-ID accuracy**: The duplicate detection uses hand-crafted features (color histograms, LBP texture, aspect ratio) which may not reliably distinguish between different people wearing similar clothes
-- **Lighting sensitivity**: Color-based matching can be affected by lighting changes
-- **For better accuracy**: Consider implementing a deep learning-based Re-ID model (e.g., OSNet)
+- **Face visibility**: Face recognition requires the person to be facing the camera
+- **Fallback accuracy**: When face is not visible, body-based Re-ID is less accurate
+- **Privacy notice**: Face recognition requires visitor consent notice at entrance
 
 ## Project Structure
 
@@ -29,22 +36,29 @@ people-counter-tracker/
 │   ├── __init__.py
 │   ├── detector.py         # YOLOX detector (ONNX Runtime)
 │   ├── counter.py          # Main counting logic
-│   ├── reid.py             # Re-identification (duplicate prevention)
+│   ├── face_reid.py        # Hybrid Re-ID (face + body fallback)
+│   ├── reid.py             # Body-only Re-ID (fallback)
 │   └── ui.py               # UI rendering
-├── weights/                # Model weights
+├── weights/                # Model weights (auto-downloaded)
+│   ├── yolox_s.onnx        # Person detection
+│   ├── det_500m.onnx       # Face detection (SCRFD)
+│   └── w600k_mbf.onnx      # Face recognition (ArcFace)
 ├── requirements.txt
 └── README.md
 ```
 
 ## Dependencies
 
-| Component | License |
-|-----------|---------|
-| YOLOX | Apache 2.0 |
-| Supervision | MIT |
-| OpenCV | Apache 2.0 |
-| ONNX Runtime | MIT |
-| NumPy | BSD |
+| Component | License | Purpose |
+|-----------|---------|---------|
+| YOLOX | Apache 2.0 | Person detection |
+| SCRFD | MIT | Face detection |
+| ArcFace | MIT | Face recognition |
+| Supervision | MIT | Tracking (ByteTrack) |
+| OpenCV | Apache 2.0 | Video processing |
+| ONNX Runtime | MIT | Model inference |
+
+> Note: Face models (SCRFD + ArcFace) are from the InsightFace project but loaded as standalone ONNX files - no InsightFace package installation required.
 
 ## Setup
 
@@ -68,7 +82,10 @@ pip install -r requirements.txt
 python main.py
 ```
 
-The YOLOX model will be automatically downloaded on first run.
+On first run, models will be automatically downloaded:
+- YOLOX person detection model (~35MB)
+- Face detection model - SCRFD (~2.5MB)
+- Face recognition model - ArcFace (~13MB)
 
 ## Keyboard Controls
 
@@ -107,15 +124,26 @@ FRAME_HEIGHT = 720
 1. **Detection**: YOLOX detects people in each frame
 2. **Tracking**: ByteTrack assigns persistent IDs to each person
 3. **Counting**: When a person crosses the counting line, direction is detected (IN or OUT)
-4. **Re-ID**: Feature matching (color, texture, body shape) attempts to prevent counting the same person twice
+4. **Re-ID** (Hybrid):
+   - If face is visible → Extract face embedding → Compare with face database
+   - If no face → Extract body features → Compare with body database
+   - This allows accurate counting even across days when people change clothes
+
+## GPU vs CPU
+
+| Mode | Detection Speed | Face Recognition | Real-time? |
+|------|----------------|------------------|------------|
+| GPU (CUDA) | ~20-50ms | ~5-10ms | Yes (15-30 FPS) |
+| CPU only | ~200-500ms | ~50-100ms | Limited (2-5 FPS) |
+
+For CPU-only servers, consider processing every 3rd frame.
 
 ## Potential Improvements
 
-- [ ] Implement deep learning Re-ID model (OSNet, FastReID)
-- [ ] Add face detection for better person distinction
-- [ ] Improve lighting invariance
 - [ ] Add support for multiple cameras
 - [ ] Add data persistence (save counts to database)
+- [ ] Add web dashboard for remote monitoring
+- [ ] Optimize for edge devices (Jetson, RPi)
 
 ## Requirements
 

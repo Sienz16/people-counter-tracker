@@ -8,7 +8,7 @@ from typing import Dict, Set, Optional
 from dataclasses import dataclass, field
 
 from .detector import YOLOXDetector
-from .reid import ReIDDatabase
+from .face_reid import HybridReID, PersonFeatures
 from .ui import UIRenderer, CounterStats
 
 import config
@@ -18,7 +18,7 @@ import config
 class TrackedPerson:
     """Data for a tracked person."""
     positions: list = field(default_factory=list)
-    features: Optional[object] = None
+    features: Optional[PersonFeatures] = None
 
 
 class PeopleCounter:
@@ -39,8 +39,8 @@ class PeopleCounter:
         # Tracking
         self.tracker = sv.ByteTrack()
 
-        # Re-ID
-        self.reid_db = ReIDDatabase(threshold=config.SIMILARITY_THRESHOLD)
+        # Hybrid Re-ID (face + body fallback)
+        self.reid = HybridReID(body_threshold=config.SIMILARITY_THRESHOLD)
 
         # Annotators
         self.box_annotator = sv.BoxAnnotator(thickness=2)
@@ -139,8 +139,8 @@ class PeopleCounter:
             if len(person.positions) > 10:
                 person.positions.pop(0)
 
-            # Update features
-            features = self.reid_db.extract_features(frame, bbox)
+            # Update features using hybrid Re-ID
+            features = self.reid.extract_features(frame, bbox)
             if features is not None:
                 person.features = features
 
@@ -176,18 +176,18 @@ class PeopleCounter:
         direction = "IN" if is_in else "OUT"
 
         if person.features is not None:
-            is_duplicate, similarity = self.reid_db.is_duplicate(person.features)
+            is_duplicate, similarity, method = self.reid.is_duplicate(person.features)
 
             if is_duplicate:
                 self.duplicate_blocked += 1
-                print(f"BLOCKED: Duplicate detected (similarity: {similarity:.2f})")
+                print(f"BLOCKED: Duplicate detected via {method} (similarity: {similarity:.2f})")
             else:
                 if is_in:
                     self.in_count += 1
                 else:
                     self.out_count += 1
-                self.reid_db.add_person(person.features)
-                print(f"{direction}: New person (Total: {self.in_count if is_in else self.out_count})")
+                self.reid.add_person(person.features)
+                print(f"{direction}: New person via {method} (Total: {self.in_count if is_in else self.out_count})")
         else:
             if is_in:
                 self.in_count += 1
@@ -213,7 +213,7 @@ class PeopleCounter:
         self.duplicate_blocked = 0
         self.crossed_ids.clear()
         self.tracked_persons.clear()
-        self.reid_db.clear()
+        self.reid.clear()
         print(">>> ALL COUNTS RESET! <<<")
 
     def move_line(self, delta: int):
