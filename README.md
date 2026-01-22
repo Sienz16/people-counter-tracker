@@ -1,5 +1,7 @@
 # People Counter
 
+> **Privacy Notice:** This project includes face detection and recognition for visitor tracking. Before deploying, make sure you get consent from people being recorded and follow privacy laws in your area. This is a learning project - use at your own risk.
+
 A real-time people counting system using YOLOX for person detection with tracking and hybrid Re-ID for accurate unique visitor counting.
 
 ## Features
